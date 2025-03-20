@@ -13,6 +13,7 @@ mod error;
 mod logging;
 mod openapi;
 mod routes;
+mod sentry;
 mod state;
 
 use clap::{Parser, Subcommand};
