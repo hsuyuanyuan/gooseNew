@@ -5,18 +5,18 @@ services:
     #  dockerfile: documentation/docs/docker/Dockerfile
     #  args:
     #    USER_ID: ${UID:-1000}
-    image: auto-triage-agent:v0.1
+    image: auto-triage-agent:v0.1  # docker hub: hsuyuanyuan/auto-triage-agent:v0.1
     volumes:
       # Mount user's directory with read-write access
       - ../../..:/root/workspace
-      - goose-config:/root/.goose
+      - root-config:/root/.config # Note: this fixed the issue with missing configs between docker runs
+      - root-local:/root/.local # Note: this fixed the missing logs between docker runs
       # Mount git config
       # ~/.gitconfig:/root/.gitconfig:ro   # make it optional
       # Mount SSH keys
       - ~/.ssh:/root/.ssh:ro
     working_dir: /root/workspace
     environment:
-      - OOSE_HOME=/root/.goose
       # Set default editor
       - EDITOR=vim
       # Preserve git author info
@@ -29,9 +29,14 @@ services:
       - DBUS_SESSION_BUS_ADDRESS
       #- GNOME_KEYRING_CONTROL
       - SSH_AUTH_SOCK
+      #- GOOSE_EXTENSIONS_ENABLED=developer,computercontroller,memory # this not working. to remove
     stdin_open: true
     tty: true
     entrypoint: ["/bin/bash"]
+    #entrypoint: ["/bin/bash", "/root/startup.sh"]
+    #entrypoint: ["/bin/bash", "-c"]
+    #command: "goose configure && goose session --with-builtin developer,computercontroller,memory; exec /bin/bash"
 
 volumes:
-  goose-config:
+  root-config:
+  root-local:
