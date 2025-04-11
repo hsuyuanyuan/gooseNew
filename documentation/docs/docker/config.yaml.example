@@ -1,0 +1,29 @@
+# path: /root/.config/goose/config.yaml
+
+GOOSE_MODEL: gemini-2.0-flash-exp
+GOOSE_PROVIDER: google
+extensions:
+  developer:
+    display_name: Developer
+    enabled: true
+    name: developer
+    timeout: 300
+    type: builtin
+  jetbrains:
+    display_name: JetBrains
+    enabled: true
+    name: jetbrains
+    timeout: 300
+    type: builtin
+  github-official:
+    args:
+    - stdio
+    cmd: github-mcp-server
+    description: null
+    enabled: true
+    #envs:
+    #  GITHUB_PERSONAL_ACCESS_TOKEN: ghp_tken_xxx # Note: the env should be defined in host, then pass in via docker-compose.yml's env section
+    name: github-official
+    timeout: 300
+    type: stdio
+

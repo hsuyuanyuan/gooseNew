@@ -26,6 +26,7 @@ FROM ubuntu:20.04
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Install runtime libraries with DBus and keyring support
+# Ensures curl is installed early
 RUN apt-get update && apt-get install -y \
     # Runtime dependencies
     ca-certificates \
@@ -48,6 +49,7 @@ RUN curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - && \
     rm -rf /var/lib/apt/lists/*
 
 # Install common development tools
+# Ensures tar is available (likely via build-essential)
 RUN apt-get update && apt-get install -y \
     # Version control
     git \
@@ -69,6 +71,7 @@ RUN apt-get update && apt-get install -y \
     # Archive tools
     zip \
     unzip \
+    tar \
     # Build essentials
     build-essential \
     # Python
@@ -79,13 +82,35 @@ RUN apt-get update && apt-get install -y \
     tmux \
     && rm -rf /var/lib/apt/lists/*
 
+# << --- ADDED SECTION: Install github-mcp-server --- >>
+# Define args for version and architecture
+ARG MCP_VERSION=latest
+ARG MCP_ARCH=x86_64 # Using 64-bit as decided
+
+WORKDIR /tmp
+
+# Download, extract, install, and cleanup MCP Server
+RUN echo "Downloading MCP Server version ${MCP_VERSION}, arch ${MCP_ARCH}" && \
+    curl -fsSLO "https://github.com/github/github-mcp-server/releases/${MCP_VERSION}/download/github-mcp-server_Linux_${MCP_ARCH}.tar.gz" && \
+    tar -xzf "github-mcp-server_Linux_${MCP_ARCH}.tar.gz" -C /tmp && \
+    echo "Copying /tmp/github-mcp-server to /usr/local/bin/" && \
+    cp /tmp/github-mcp-server /usr/local/bin/github-mcp-server && \
+    echo "Setting execute permissions" && \
+    chmod +x /usr/local/bin/github-mcp-server && \
+    echo "Cleaning up downloaded tarball and extracted binary from /tmp" && \
+    rm "github-mcp-server_Linux_${MCP_ARCH}.tar.gz" && \
+    rm -f /tmp/github-mcp-server
+
+# << --- END OF ADDED SECTION --- >>
+
 # Install uv using curl
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Copy the built binaries
+# Copy the built binaries from the builder stage
 COPY --from=builder /usr/src/goose/target/release/goose /usr/local/bin/
 
 # Create a wrapper script to initialize DBus and keyring
+# (Content provided by user - ensures correct permissions)
 RUN echo '#!/bin/bash\n\
 # Start DBus session daemon if not running\n\
 if [ -z "$DBUS_SESSION_BUS_ADDRESS" ]; then\n\
@@ -99,8 +124,10 @@ if [ -z "$GNOME_KEYRING_CONTROL" ]; then\n\
   export GNOME_KEYRING_CONTROL SSH_AUTH_SOCK\n\
 fi\n\
 \n\
+# Execute the command passed to the script\n\
+exec "$@"\n\
 ' > /usr/local/bin/entrypoint.sh && \
-chmod +x /usr/local/bin/entrypoint.sh
+    chmod +x /usr/local/bin/entrypoint.sh
 
 # Set up some basic git config
 RUN git config --global init.defaultBranch main && \
@@ -109,3 +136,15 @@ RUN git config --global init.defaultBranch main && \
 # Add some helpful aliases
 RUN echo 'alias ll="ls -la"' >> ~/.bashrc && \
     echo 'alias fd=fdfind' >> ~/.bashrc
+
+# << --- ADDED: Define container entrypoint and command --- >>
+# Use the wrapper script as the entrypoint
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+
+# Define the default command to be executed by the entrypoint script
+# This should be your agent application. It needs to launch MCP server internally.
+# CMD ["goose"]
+# << --- END OF ADDED SECTION --- >>
+
+# Set back to a default working directory if needed (e.g., where code is mounted)
+# WORKDIR /root/workspace # Or wherever your compose file mounts code

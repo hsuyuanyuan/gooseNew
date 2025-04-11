@@ -1,11 +1,12 @@
 services:
   auto-triage:
-    #build:
-    #  context: ../../..
-    #  dockerfile: documentation/docs/docker/Dockerfile
-    #  args:
-    #    USER_ID: ${UID:-1000}
-    image: auto-triage-agent:v0.1  # docker hub: hsuyuanyuan/auto-triage-agent:v0.1
+    build:
+      context: ../../..
+      dockerfile: documentation/docs/docker/Dockerfile
+      args:
+        USER_ID: ${UID:-1000}
+    #image: auto-triage-agent:v0.1  # docker hub: hsuyuanyuan/auto-triage-agent:v0.1
+    # Note: change to use image step, instead of build step
     volumes:
       # Mount user's directory with read-write access
       - ../../..:/root/workspace
@@ -15,6 +16,8 @@ services:
       # ~/.gitconfig:/root/.gitconfig:ro   # make it optional
       # Mount SSH keys
       - ~/.ssh:/root/.ssh:ro
+      # Mount Docker socket for running GitHub MCP server
+      # - /var/run/docker.sock:/var/run/docker.sock
     working_dir: /root/workspace
     environment:
       # Set default editor
@@ -27,15 +30,12 @@ services:
       - GOOSE_PROVIDER=google
       - GOOSE_MODEL=gemini-2.0-flash-exp
       - DBUS_SESSION_BUS_ADDRESS
-      #- GNOME_KEYRING_CONTROL
       - SSH_AUTH_SOCK
-      #- GOOSE_EXTENSIONS_ENABLED=developer,computercontroller,memory # this not working. to remove
+      - GITHUB_PERSONAL_ACCESS_TOKEN
     stdin_open: true
     tty: true
-    entrypoint: ["/bin/bash"]
-    #entrypoint: ["/bin/bash", "/root/startup.sh"]
-    #entrypoint: ["/bin/bash", "-c"]
-    #command: "goose configure && goose session --with-builtin developer,computercontroller,memory; exec /bin/bash"
+    entrypoint: ["/bin/bash"] #   #goose  # "/bin/bash"
+    # No entrypoint or command override needed here - uses Dockerfile's
 
 volumes:
   root-config:
