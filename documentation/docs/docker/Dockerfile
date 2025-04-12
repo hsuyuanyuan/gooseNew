@@ -82,6 +82,10 @@ RUN apt-get update && apt-get install -y \
     tmux \
     && rm -rf /var/lib/apt/lists/*
 
+# << --- Install dependencies for cloudwatch-logs-mcp --- >>
+RUN pip3 install --no-cache-dir boto3
+# << --- END OF SECTION --- >>
+
 # << --- ADDED SECTION: Install github-mcp-server --- >>
 # Define args for version and architecture
 ARG MCP_VERSION=latest
@@ -108,6 +112,23 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Copy the built binaries from the builder stage
 COPY --from=builder /usr/src/goose/target/release/goose /usr/local/bin/
+
+# << --- MODIFIED: Download the cloudwatch-logs-mcp script --- >>
+# Define the directory and ensure it exists
+ARG CW_MCP_DIR=/app/cloudwatch-logs-mcp
+RUN mkdir -p ${CW_MCP_DIR}
+
+# Download the script using curl
+RUN curl -fsSL -o ${CW_MCP_DIR}/main.py \
+    https://raw.githubusercontent.com/serkanh/cloudwatch-logs-mcp/main/main.py
+
+# Optionally make it executable
+RUN chmod +x ${CW_MCP_DIR}/main.py
+# << --- END OF MODIFIED SECTION --- >>
+
+# Set WORKDIR back if needed, or adjust path in agent code
+WORKDIR /app
+
 
 # Create a wrapper script to initialize DBus and keyring
 # (Content provided by user - ensures correct permissions)
