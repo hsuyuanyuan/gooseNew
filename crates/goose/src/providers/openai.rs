@@ -22,6 +22,8 @@ pub const OPEN_AI_KNOWN_MODELS: &[&str] = &[
     "o1",
     "o3",
     "o4-mini",
+    "gpt-4.1",
+    "gpt-4.1-2025-04-14", // from models/list endpoint: https://platform.openai.com/docs/api-reference/models/list
 ];
 
 pub const OPEN_AI_DOC_URL: &str = "https://platform.openai.com/docs/models";
