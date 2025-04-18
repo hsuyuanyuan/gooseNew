@@ -1,5 +1,6 @@
 # Build stage
-FROM rust:bullseye AS builder
+FROM rust:bookworm AS builder
+# orginal using rust:bullseye: Debian Bullseye (which rust:bullseye is based on) uses OpenSSL 1.1.1. Therefore, the compiled goose binary is linked against libssl.so.1.1.
 
 SHELL ["/bin/bash", "-c"]
 
@@ -19,13 +20,14 @@ COPY . .
 # Build the project
 RUN cargo build --release
 
-# Runtime stage
+# Runtime stage.  Change from 22.04 to 20.04 to fix the libssl 1.1 not found error when starting the container
 FROM ubuntu:22.04
 
 # Configure non-interactive installation
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Install runtime libraries with DBus and keyring support
+# Ensures curl is installed early
 RUN apt-get update && apt-get install -y \
     # Runtime dependencies
     ca-certificates \
@@ -48,6 +50,7 @@ RUN curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - && \
     rm -rf /var/lib/apt/lists/*
 
 # Install common development tools
+# Ensures tar is available (likely via build-essential)
 RUN apt-get update && apt-get install -y \
     # Version control
     git \
@@ -69,6 +72,7 @@ RUN apt-get update && apt-get install -y \
     # Archive tools
     zip \
     unzip \
+    tar \
     # Build essentials
     build-essential \
     # Python
@@ -81,6 +85,34 @@ RUN apt-get update && apt-get install -y \
     tmux \
     && rm -rf /var/lib/apt/lists/*
 
+# << --- MODIFIED SECTION: Install Python dependencies --- >>
+# Install dependencies for cloudwatch-logs-mcp AND the required MCP package
+RUN pip3 install --no-cache-dir \
+    boto3 \
+    "mcp[cli]>=1.6.0"
+# << --- END OF MODIFIED SECTION --- >>
+
+# << --- ADDED SECTION: Install github-mcp-server --- >>
+# Define args for version and architecture
+ARG MCP_VERSION=latest
+ARG MCP_ARCH=x86_64 # Using 64-bit as decided
+
+WORKDIR /tmp
+
+# Download, extract, install, and cleanup MCP Server
+RUN echo "Downloading MCP Server version ${MCP_VERSION}, arch ${MCP_ARCH}" && \
+    curl -fsSLO "https://github.com/github/github-mcp-server/releases/${MCP_VERSION}/download/github-mcp-server_Linux_${MCP_ARCH}.tar.gz" && \
+    tar -xzf "github-mcp-server_Linux_${MCP_ARCH}.tar.gz" -C /tmp && \
+    echo "Copying /tmp/github-mcp-server to /usr/local/bin/" && \
+    cp /tmp/github-mcp-server /usr/local/bin/github-mcp-server && \
+    echo "Setting execute permissions" && \
+    chmod +x /usr/local/bin/github-mcp-server && \
+    echo "Cleaning up downloaded tarball and extracted binary from /tmp" && \
+    rm "github-mcp-server_Linux_${MCP_ARCH}.tar.gz" && \
+    rm -f /tmp/github-mcp-server
+
+# << --- END OF ADDED SECTION --- >>
+
 # Install uv using curl
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
@@ -90,7 +122,36 @@ RUN curl -Ls https://sh.jbang.dev | bash -s - app setup
 # Copy the built binaries
 COPY --from=builder /usr/src/goose/target/release/goose /usr/local/bin/
 
+# << --- ADDED: Add goose configuration file --- >>
+# Create the target directory inside the image if it might not exist
+RUN mkdir -p /root/.config/goose
+
+# Copy the config file from the build context into the image
+# IMPORTANT: Adjust the source path './docker/config/goose/config.yaml' below
+#            to match the actual location where you saved the config file
+#            relative to your Docker build context root.
+COPY ./documentation/docs/docker/config.yaml /root/.config/goose/config.yaml
+# << --- END OF ADDED SECTION --- >>
+
+# << --- MODIFIED: Download the cloudwatch-logs-mcp script --- >>
+# Define the directory and ensure it exists
+ARG CW_MCP_DIR=/app/cloudwatch-logs-mcp
+RUN mkdir -p ${CW_MCP_DIR}
+
+# Download the script using curl
+RUN curl -fsSL -o ${CW_MCP_DIR}/main.py \
+    https://raw.githubusercontent.com/serkanh/cloudwatch-logs-mcp/main/main.py
+
+# Optionally make it executable
+RUN chmod +x ${CW_MCP_DIR}/main.py
+# << --- END OF MODIFIED SECTION --- >>
+
+# Set WORKDIR back if needed, or adjust path in agent code
+WORKDIR /app
+
+
 # Create a wrapper script to initialize DBus and keyring
+# (Content provided by user - ensures correct permissions)
 RUN echo '#!/bin/bash\n\
 # Start DBus session daemon if not running\n\
 if [ -z "$DBUS_SESSION_BUS_ADDRESS" ]; then\n\
@@ -104,8 +165,10 @@ if [ -z "$GNOME_KEYRING_CONTROL" ]; then\n\
   export GNOME_KEYRING_CONTROL SSH_AUTH_SOCK\n\
 fi\n\
 \n\
+# Execute the command passed to the script\n\
+exec "$@"\n\
 ' > /usr/local/bin/entrypoint.sh && \
-chmod +x /usr/local/bin/entrypoint.sh
+    chmod +x /usr/local/bin/entrypoint.sh
 
 # Set up some basic git config
 RUN git config --global init.defaultBranch main && \
@@ -115,5 +178,18 @@ RUN git config --global init.defaultBranch main && \
 RUN echo 'alias ll="ls -la"' >> ~/.bashrc && \
     echo 'alias fd=fdfind' >> ~/.bashrc
 
+
 # Add JBang to PATH
 RUN echo 'export PATH="$HOME/.jbang/bin:$PATH"' >> ~/.bashrc
+
+# << --- ADDED: Define container entrypoint and command --- >>
+# Use the wrapper script as the entrypoint
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+
+# Define the default command to be executed by the entrypoint script
+# This should be your agent application. It needs to launch MCP server internally.
+# CMD ["goose"]
+# << --- END OF ADDED SECTION --- >>
+
+# Set back to a default working directory if needed (e.g., where code is mounted)
+# WORKDIR /root/workspace # Or wherever your compose file mounts code

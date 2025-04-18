@@ -1,0 +1,28 @@
+GOOSE_MODEL: gemini-2.0-flash-exp
+GOOSE_PROVIDER: google
+extensions:
+  developer:
+    display_name: Developer
+    enabled: true
+    name: developer
+    timeout: 300
+    type: builtin
+  cloudwatch-mcp:
+    args:
+    - /app/cloudwatch-logs-mcp/main.py
+    cmd: python3
+    description: null
+    enabled: true
+    name: cloudwatch-mcp
+    timeout: 300
+    type: stdio
+  github-official:
+    args:
+    - stdio
+    cmd: github-mcp-server
+    description: null
+    enabled: true
+    name: github-official
+    timeout: 300
+    type: stdio
+
